@@ -1,4 +1,3 @@
-# E:\MRVNet2D\Restormer + Volterra\volterra_layer.py
 # volterra_layer.py
 import sys
 import os

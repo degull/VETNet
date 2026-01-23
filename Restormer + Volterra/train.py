@@ -1,6 +1,5 @@
 # train.py
-# E:/MRVNet2D/Restormer + Volterra/train.py
-
+# E:\restormer+volterra\Restormer + Volterra\train.py
 """ import os
 import torch
 import torch.nn as nn
