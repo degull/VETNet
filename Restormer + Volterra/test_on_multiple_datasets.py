@@ -1,11 +1,13 @@
 import os
+
 import torch
 import numpy as np
 from PIL import Image
 from torchvision import transforms
 from skimage.metrics import peak_signal_noise_ratio as compute_psnr
 from skimage.metrics import structural_similarity as compute_ssim
-from restormer_volterra import RestormerVolterra
+from models.restormer_volterra import RestormerVolterra
+
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

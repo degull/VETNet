@@ -23,6 +23,7 @@ if CUR_DIR not in sys.path:
 
 from models.restormer_volterra import RestormerVolterra
 
+
 # -------------------------
 # Utils: image I/O
 # -------------------------
@@ -31,10 +32,12 @@ def _to_rgb_pil(img: Image.Image) -> Image.Image:
         return img
     return img.convert("RGB")
 
+
 def load_image_rgb(path: str) -> Image.Image:
     img = Image.open(path)
     img = _to_rgb_pil(img)
     return img
+
 
 def pil_to_tensor_01(img: Image.Image) -> torch.Tensor:
     # RGB, [0,1], shape: (1,3,H,W)
@@ -42,6 +45,7 @@ def pil_to_tensor_01(img: Image.Image) -> torch.Tensor:
     arr = np.transpose(arr, (2, 0, 1))  # C,H,W
     ten = torch.from_numpy(arr).unsqueeze(0)  # 1,C,H,W
     return ten
+
 
 def tensor_01_to_pil(x: torch.Tensor) -> Image.Image:
     # x: (1,3,H,W) or (3,H,W), [0,1]
@@ -51,6 +55,7 @@ def tensor_01_to_pil(x: torch.Tensor) -> Image.Image:
     x = np.transpose(x, (1, 2, 0))  # H,W,C
     x = (x * 255.0 + 0.5).astype(np.uint8)
     return Image.fromarray(x, mode="RGB")
+
 
 def ensure_dir(d: str):
     os.makedirs(d, exist_ok=True)
@@ -87,6 +92,31 @@ def get_font(font_size: int = 22) -> ImageFont.ImageFont:
             pass
     return ImageFont.load_default()
 
+
+def measure_label_block(
+    canvas: Image.Image,
+    title: str,
+    lines: List[str],
+    font: ImageFont.ImageFont,
+    pad: int = 10
+) -> Tuple[int, int]:
+    """
+    Returns (w, h) of the label block using the SAME measurement logic as draw_label_block.
+    This allows reserving a top bar so blocks never overlap the image.
+    """
+    draw = ImageDraw.Draw(canvas)
+    all_text = [title] + lines
+    widths, heights = [], []
+    for t in all_text:
+        bbox = draw.textbbox((0, 0), t, font=font)
+        widths.append(bbox[2] - bbox[0])
+        heights.append(bbox[3] - bbox[1])
+
+    w = max(widths) + 2 * pad
+    h = sum(heights) + (len(heights) + 1) * 4 + 2 * pad
+    return w, h
+
+
 def draw_label_block(
     canvas: Image.Image,
     x0: int,
@@ -107,7 +137,7 @@ def draw_label_block(
     w = max(widths) + 2 * pad
     h = sum(heights) + (len(heights) + 1) * 4 + 2 * pad
 
-    # background box (semi-opaque effect by drawing solid rectangle)
+    # background box
     rect = (x0, y0, x0 + w, y0 + h)
     draw.rectangle(rect, fill=(0, 0, 0))
 
@@ -130,7 +160,8 @@ def make_triplet_canvas(
 ):
     """
     Creates a single image: [input | restored | gt]
-    Adds PSNR/SSIM for input-vs-gt and restored-vs-gt inside the image.
+    Adds PSNR/SSIM for input-vs-gt and restored-vs-gt.
+    Ensures label boxes NEVER overlap the image by reserving a top bar.
     """
     inp_img = _to_rgb_pil(inp_img)
     out_img = _to_rgb_pil(out_img)
@@ -144,43 +175,60 @@ def make_triplet_canvas(
         gt_img = gt_img.resize((W, H), resample=Image.BILINEAR)
 
     gap = 8
-    top_bar = 0
+    font = get_font(22)
+
+    # label texts
+    ip_psnr, ip_ssim = inp_metrics
+    op_psnr, op_ssim = out_metrics
+    input_lines = [f"PSNR(vs GT): {ip_psnr:.2f}", f"SSIM(vs GT): {ip_ssim:.4f}"]
+    out_lines = [f"PSNR(vs GT): {op_psnr:.2f}", f"SSIM(vs GT): {op_ssim:.4f}"]
+    gt_lines: List[str] = []
+
+    # compute required top bar height (max of 3 blocks) + margins
+    tmp = Image.new("RGB", (16, 16), (0, 0, 0))
+    _, h_in = measure_label_block(tmp, "INPUT", input_lines, font=font)
+    _, h_out = measure_label_block(tmp, "RESTORED", out_lines, font=font)
+    _, h_gt = measure_label_block(tmp, "GT", gt_lines, font=font)
+
+    top_pad = 6
+    bottom_pad = 6
+    top_bar = max(h_in, h_out, h_gt) + top_pad + bottom_pad
+
+    # create canvas with reserved label bar on top
     canvas = Image.new("RGB", (W * 3 + gap * 2, H + top_bar), (20, 20, 20))
+
+    # paste images BELOW top_bar so labels do not overlap
     canvas.paste(inp_img, (0, top_bar))
     canvas.paste(out_img, (W + gap, top_bar))
     canvas.paste(gt_img, (2 * (W + gap), top_bar))
 
-    font = get_font(22)
+    # draw label blocks inside the top bar
+    label_y = top_pad
 
-    # Input panel block
-    ip_psnr, ip_ssim = inp_metrics
     draw_label_block(
         canvas,
         x0=12,
-        y0=12,
+        y0=label_y,
         title="INPUT",
-        lines=[f"PSNR(vs GT): {ip_psnr:.2f}", f"SSIM(vs GT): {ip_ssim:.4f}"],
+        lines=input_lines,
         font=font
     )
 
-    # Restored panel block
-    op_psnr, op_ssim = out_metrics
     draw_label_block(
         canvas,
         x0=W + gap + 12,
-        y0=12,
+        y0=label_y,
         title="RESTORED",
-        lines=[f"PSNR(vs GT): {op_psnr:.2f}", f"SSIM(vs GT): {op_ssim:.4f}"],
+        lines=out_lines,
         font=font
     )
 
-    # GT panel label (no metrics)
     draw_label_block(
         canvas,
         x0=2 * (W + gap) + 12,
-        y0=12,
+        y0=label_y,
         title="GT",
-        lines=[],
+        lines=gt_lines,
         font=font
     )
 
@@ -325,9 +373,8 @@ if __name__ == "__main__":
 """
 python "E:\restormer+volterra\Restormer + Volterra\infer_triplet_with_metrics.py" `
   --ckpt "E:\restormer+volterra\checkpoints\#01_all_tasks_balanced_160\epoch_100_ssim0.9177_psnr32.58.pth" `
-  --input "E:\restormer+volterra\data\CSD\Test\Snow\111.tif" `
-  --gt    "E:\restormer+volterra\data\CSD\Test\Gt\111.tif" `
+  --input "E:\restormer+volterra\data\GOPRO_Large\train\GOPR0372_07_01\blur\000646.png" `
+  --gt    "E:\restormer+volterra\data\GOPRO_Large\train\GOPR0372_07_01\sharp\000646.png" `
   --outdir "E:\restormer+volterra\results\triplets" `
   --dim 48 --bias 0 --volterra_rank 4 --use_amp 1
-
 """
