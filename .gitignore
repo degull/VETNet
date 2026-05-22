@@ -13,6 +13,12 @@ Restormer + Volterra/voc2012_head_only_runs/
 *.pth
 *.pt
 *.ckpt
+*.csv
+*.tsv
+*.log
+*.jsonl
+*.npy
+*.npz
 
 # Local baseline and VTN workspaces
 VTN/
