@@ -1,10 +1,19 @@
-# 기존
+# Existing local artifacts
 checkpoints/
 data/
 results/
 
-# 추가
+# Additional local artifacts
 Restormer + Volterra/tasks/deraining/checkpoint_rain100h/
 Restormer + Volterra/tasks/deraining/checkpoint_rain100hs/
-
 Restormer + Volterra/distortion_imgs
+
+# Experiment outputs and checkpoints
+Restormer + Volterra/voc2012_head_only_runs/
+*.pth
+*.pt
+*.ckpt
+
+# Local baseline and VTN workspaces
+VTN/
+baselines/
