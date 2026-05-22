@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+
+# Large artifacts should stay outside the clean VTN source folder.
+checkpoint*/
+checkpoints/
+*.pth
+*.pt
+*.ckpt
+results/
+runs/
+wandb/
+
+# Generated paper artifacts.
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.pdf

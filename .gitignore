@@ -20,6 +20,14 @@ Restormer + Volterra/voc2012_head_only_runs/
 *.npy
 *.npz
 
-# Local baseline and VTN workspaces
-VTN/
-baselines/
+# VTN local artifacts and vendored dependencies
+VTN/.deps/
+VTN/.deps_diffuir/
+VTN/baselines_data/
+VTN/checkpoints/
+VTN/data/
+VTN/datasets/
+VTN/experiments/
+VTN/results/
+VTN/third_party/
+VTN/third_party_ema/

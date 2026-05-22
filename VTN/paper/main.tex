@@ -1,0 +1,275 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[margin=0.75in]{geometry}
+\usepackage{times}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\newcommand{\ours}{VTN-IR}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\cmark}{\checkmark}
+
+\title{\ours: Volterra-Enhanced Transformer Network for Unified Image Restoration}
+\author{Anonymous ECCV/CVPR Submission}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Unified image restoration requires a single model to recover clean images from diverse and often co-occurring degradations, such as rain, haze, snow, noise, and motion blur. Existing restoration Transformers are effective at long-range feature aggregation, but their core operations largely rely on linear projections followed by point-wise nonlinearities or simple multiplicative gates. As a result, non-additive interactions among degradation patterns, image structures, and local textures must be learned only implicitly. This paper presents \ours, a Volterra-enhanced Transformer for unified image restoration. The key idea is to introduce an efficient second-order Volterra interaction operator into both the global feature mixing path and the local feed-forward refinement path. Unlike generic gating, the proposed operator explicitly parameterizes pairwise feature interactions with a low-rank quadratic kernel, enabling the network to model composite degradation effects while controlling computational overhead. We evaluate \ours under single-task, all-in-one, and composite-degradation protocols with carefully separated training settings. In addition to restoration quality, we report parameters, FLOPs, latency, memory, rank/order sensitivity, and qualitative/interpretability analyses. Experiments show that \ours improves restoration accuracy while maintaining a practical accuracy-efficiency trade-off. \todo{Fill final quantitative summary after rerunning all experiments.}
+\end{abstract}
+
+\section{Introduction}
+Image restoration aims to recover a clean image from degraded observations. In real scenes, degradations are rarely isolated: rain streaks may appear with haze, snow can occlude edges and textures, and blur often interacts with sensor noise. Such degradations are not merely additive. Their visual effects depend on image structure, local contrast, spatial frequency, and the interaction between multiple corruption processes.
+
+Recent Transformer-based restoration methods have achieved strong performance by combining global context modeling with local refinement. However, most restoration Transformers still use linear projections, attention aggregation, feed-forward layers, and point-wise nonlinearities as their principal modeling primitives. These operations can approximate complex nonlinear mappings when stacked deeply, but the interaction between feature pairs is not explicitly parameterized. This motivates a simple question: can a restoration Transformer benefit from an explicit second-order interaction mechanism that directly models non-additive feature dependencies?
+
+We answer this question with \ours. The proposed model embeds a low-rank second-order Volterra operator into two complementary paths of a restoration Transformer: the attention-based global mixing path and the feed-forward local refinement path. The Volterra formulation gives a principled way to represent nonlinear systems as a sum of first-order and higher-order terms. In \ours, the first-order term preserves conventional convolutional projection, while the second-order term captures pairwise feature products through a low-rank factorization. This allows the model to strengthen feature responses that depend jointly on image content and degradation cues, such as edges corrupted by motion blur or texture regions overlaid with rain/haze.
+
+We do not claim that Volterra theory itself is new. Volterra expansions and high-order neural operators have been explored in prior work. Our contribution is the efficient and structured integration of second-order Volterra interactions into both global and local restoration Transformer pathways, together with a unified restoration study that separates single-task, all-in-one, and composite-degradation protocols. We further revisit the experimental setup in response to concerns about fairness, efficiency, interpretability, and result consistency.
+
+Our contributions are:
+\begin{itemize}[leftmargin=*]
+    \item We propose a low-rank second-order Volterra operator for restoration Transformers, explicitly modeling pairwise feature interactions beyond linear projection and simple gating.
+    \item We integrate the operator into both the attention/mixing path and the feed-forward/refinement path, enabling complementary global and local nonlinear restoration.
+    \item We provide a protocol-clean evaluation across single-task, all-in-one, and composite-degradation settings, with separate tables for independently trained and zero-shot models.
+    \item We report efficiency, memory, rank sensitivity, order sensitivity, pathway ablations, qualitative comparisons, and interaction-map visualizations to clarify both the cost and behavior of the proposed mechanism.
+\end{itemize}
+
+\section{Related Work}
+\paragraph{Image restoration Transformers.}
+Restoration Transformers such as Restormer and Uformer have shown that attention-based global modeling is effective for low-level vision. Subsequent all-in-one and universal restoration methods, including PromptIR, DA-CLIP, DiffUIR, AdaIR, MoCE-IR, FoundIR, MambaIR, and MambaIRv2, improve restoration by prompt conditioning, diffusion priors, adaptive modulation, expert routing, foundation-scale training, or state-space modeling. Our work is complementary: rather than introducing task prompts or degradation-specific routers, \ours focuses on explicitly modeling second-order feature interactions inside a shared Transformer backbone.
+
+\paragraph{Volterra and high-order neural modeling.}
+Volterra series provide a classical framework for representing nonlinear systems through first-order, second-order, and higher-order kernels. Prior neural models such as VolterraNet and MR-VNet explored Volterra-inspired operations, including applications to restoration. High-order interaction networks such as HorNet use recursive gated convolutions to capture high-order spatial interactions. \ours differs in three aspects. First, it targets Transformer restoration blocks rather than pure convolutional high-order operators. Second, it inserts the second-order operator into both global mixing and local refinement paths. Third, it uses a low-rank quadratic parameterization and evaluates the resulting accuracy-efficiency trade-off in unified restoration settings.
+
+\paragraph{Gating and multiplicative modules.}
+Gated feed-forward networks and multiplicative fusion modules are widely used in restoration. These mechanisms typically perform element-wise products between projected features. In contrast, the proposed Volterra operator contains a first-order projection and a rank-controlled sum of quadratic interactions. Thus, the operator is not only a gate but a parameterized second-order mapping whose rank directly controls capacity and cost.
+
+\section{Method}
+\subsection{Volterra Motivation for Restoration}
+Let $x$ denote a degraded feature representation. A first-order restoration block can be written abstractly as
+\begin{equation}
+    y = K_1(x),
+\end{equation}
+where $K_1$ is a linear or convolutional projection followed by nonlinearities in surrounding layers. For composite degradations, the desired response often depends on interactions between feature components. For example, the correction for a rain-like line pattern may depend on whether it overlaps with an image edge; the effect of haze may depend on local contrast and depth-like cues; blur removal may depend on texture frequency and motion direction. Such dependencies are naturally expressed by a second-order term:
+\begin{equation}
+    y = K_1(x) + K_2(x, x),
+\end{equation}
+where $K_2$ models pairwise interactions. Directly parameterizing $K_2$ is expensive, so \ours uses a low-rank factorization.
+
+\subsection{Low-Rank Volterra Operator}
+Given an input feature $x \in \mathbb{R}^{C \times H \times W}$, the proposed operator is
+\begin{equation}
+    \mathcal{V}(x) = W_1(x) + \sum_{r=1}^{R} A_r(x) \odot B_r(x),
+\end{equation}
+where $W_1$, $A_r$, and $B_r$ are convolutional projections, $\odot$ denotes element-wise multiplication, and $R$ is the Volterra rank. The first term preserves the linear response, while the rank-$R$ quadratic term captures second-order interactions. The rank hyperparameter provides an explicit trade-off between capacity and computation.
+
+\subsection{Volterra-Enhanced Transformer Block}
+The \ours block follows a hierarchical encoder-decoder restoration Transformer. For an input feature $x$, the block applies layer normalization, multi-head transposed attention, a Volterra operator, and a residual connection:
+\begin{equation}
+    x' = x + \mathcal{V}_{m}(\mathrm{MDTA}(\mathrm{LN}(x))).
+\end{equation}
+The feed-forward path then applies a gated depth-wise feed-forward network followed by another Volterra operator:
+\begin{equation}
+    y = x' + \mathcal{V}_{f}(\mathrm{GDFN}(\mathrm{LN}(x'))).
+\end{equation}
+Here $\mathcal{V}_{m}$ models global interaction responses after attention-based mixing, while $\mathcal{V}_{f}$ models local nonlinear refinement after channel/spatial feed-forward processing. This dual placement is important because degradation interactions occur both across distant image structures and within local textures.
+
+\subsection{Architecture}
+The overall network uses a four-level encoder-decoder architecture with skip connections and refinement blocks. Unless otherwise stated, the default configuration uses channel width 48, block depths $\{4,6,6,8\}$, heads $\{1,2,4,8\}$, feed-forward expansion factor 2.66, and Volterra rank $R=4$. \todo{Confirm final default configuration against the released training scripts before submission.}
+
+\section{Experimental Protocol}
+To avoid ambiguity between training settings, we report four protocol groups separately. A result is directly comparable only within the same protocol group and exposure setting.
+
+\paragraph{P1: Single-task training.}
+Each method is trained and evaluated on one degradation type at a time. These results measure task-specific restoration capacity and should not be used alone to justify all-in-one claims.
+
+\paragraph{P2: All-in-one training.}
+A single shared model is trained jointly on multiple degradation types. This table is the primary evidence for unified restoration. Baselines are directly ranked against \ours only when they are retrained under the same training mixture or evaluated from a compatible official checkpoint. Results copied from prior papers or trained with non-identical data are marked as reported/non-identical and are used only as context.
+
+\paragraph{P3: Zero-shot and cross-degradation evaluation.}
+Models are evaluated on unseen degradation types or unseen task combinations without retraining. These results measure generalization and are not mixed with retrained all-in-one comparisons.
+
+\paragraph{P4: Composite-degradation evaluation.}
+Models are evaluated on images containing multiple degradations simultaneously. We report composite zero-shot and composite-trained results separately, since training exposure changes the interpretation of the comparison.
+
+\paragraph{Metrics.}
+We report PSNR, SSIM, parameters, FLOPs, latency, memory, and qualitative comparisons. Efficiency is measured at fixed input resolutions with identical hardware and batch size. \todo{Insert GPU model, CUDA/PyTorch versions, precision mode, and timing protocol.}
+
+\section{Experiments}
+\subsection{All-in-One Unified Restoration}
+\begin{table*}[t]
+\centering
+\caption{Primary unified restoration comparison under the all-in-one protocol. ``Retrained'' means the method is trained using the same multi-task data mixture as \ours. ``Official-ckpt'' indicates evaluation from a compatible official checkpoint. ``Reported'' indicates numbers taken from the corresponding paper under a non-identical protocol and is not used for direct ranking.}
+\label{tab:all_in_one}
+\small
+\begin{tabular}{lcccccccccc}
+\toprule
+\multirow{2}{*}{Method} & \multirow{2}{*}{Status} & \multicolumn{2}{c}{Rain} & \multicolumn{2}{c}{Blur} & \multicolumn{2}{c}{Haze} & \multicolumn{2}{c}{Snow} & Avg. PSNR \\
+ & & PSNR & SSIM & PSNR & SSIM & PSNR & SSIM & PSNR & SSIM & \\
+\midrule
+Restormer & Retrained & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+PromptIR & Retrained/Official-ckpt & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+DA-CLIP & Reported/Zero-shot & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+AdaIR & Retrained/Reported & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+MoCE-IR & Reported & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+FoundIR & Reported & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\ours & Ours & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Single-Task Restoration}
+\begin{table*}[t]
+\centering
+\caption{Single-task restoration results. Each method is trained separately for the target task unless marked otherwise. These results support task-specific effectiveness but are not used as the primary evidence for unified restoration.}
+\label{tab:single_task}
+\small
+\begin{tabular}{lcccccccc}
+\toprule
+\multirow{2}{*}{Method} & \multicolumn{2}{c}{Rain100H} & \multicolumn{2}{c}{GoPro} & \multicolumn{2}{c}{RESIDE-6K} & \multicolumn{2}{c}{CSD/Snow} \\
+ & PSNR & SSIM & PSNR & SSIM & PSNR & SSIM & PSNR & SSIM \\
+\midrule
+Restormer & -- & -- & -- & -- & -- & -- & -- & -- \\
+Uformer & -- & -- & -- & -- & -- & -- & -- & -- \\
+PromptIR & -- & -- & -- & -- & -- & -- & -- & -- \\
+MambaIR/MambaIRv2 & -- & -- & -- & -- & -- & -- & -- & -- \\
+AdaIR & -- & -- & -- & -- & -- & -- & -- & -- \\
+\ours & -- & -- & -- & -- & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Composite-Degradation Robustness}
+\begin{table}[t]
+\centering
+\caption{Composite-degradation evaluation. Training exposure must be stated explicitly to avoid comparing retrained models against zero-shot baselines.}
+\label{tab:composite}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Method & Exposure & PSNR & SSIM & LPIPS \\
+\midrule
+Restormer & Zero-shot & -- & -- & -- \\
+PromptIR & Zero-shot/Retrained & -- & -- & -- \\
+MambaIRv2 & Zero-shot/Reported & -- & -- & -- \\
+\ours & Zero-shot & -- & -- & -- \\
+\ours & Composite-trained & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Efficiency Analysis}
+\begin{table}[t]
+\centering
+\caption{Computational cost measured with the same input size, hardware, precision, and batch size. This table directly addresses whether gains come only from increased model capacity.}
+\label{tab:efficiency}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Method & Params & FLOPs & Latency & Memory & PSNR \\
+ & (M) & (G) & (ms) & (MB) & \\
+\midrule
+Restormer & -- & -- & -- & -- & -- \\
+PromptIR & -- & -- & -- & -- & -- \\
+MambaIRv2 & -- & -- & -- & -- & -- \\
+\ours-$R{=}1$ & -- & -- & -- & -- & -- \\
+\ours-$R{=}4$ & -- & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Ablation Studies}
+\begin{table}[t]
+\centering
+\caption{Pathway ablation. The same dataset, training schedule, and checkpoint selection rule must be used for all rows.}
+\label{tab:path_ablation}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Variant & Params & FLOPs & PSNR & SSIM \\
+\midrule
+Baseline Transformer & -- & -- & -- & -- \\
+Volterra in attention only & -- & -- & -- & -- \\
+Volterra in FFN only & -- & -- & -- & -- \\
+Volterra in both paths & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Rank sensitivity of the Volterra operator.}
+\label{tab:rank}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Rank $R$ & Params & FLOPs & Latency & PSNR & SSIM \\
+\midrule
+1 & -- & -- & -- & -- & -- \\
+2 & -- & -- & -- & -- & -- \\
+4 & -- & -- & -- & -- & -- \\
+8 & -- & -- & -- & -- & -- \\
+16 & -- & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Order sensitivity. The second-order model is expected to provide the best performance-cost balance; higher orders should be included only if they can be implemented and trained fairly.}
+\label{tab:order}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Order & Params & FLOPs & PSNR & SSIM \\
+\midrule
+First-order only & -- & -- & -- & -- \\
+Second-order, low-rank & -- & -- & -- & -- \\
+Third-order, low-rank & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Qualitative and Interpretability Analysis}
+Figure~\ref{fig:qualitative} will compare restored images across representative rain, haze, blur, snow, and composite examples. Crops should use identical locations and scales across all methods. Figure~\ref{fig:interaction} will visualize Volterra interaction responses or quadratic activation maps. These visualizations are intended to verify whether the second-order branch responds to meaningful structures such as edges, rain streaks, haze boundaries, snow occlusions, and texture regions.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.92\linewidth}{\centering Placeholder for qualitative comparison: input / baseline / recent all-in-one method / \ours / ground truth.}}
+\caption{Qualitative restoration comparison. \todo{Replace with final figure after rerunning inference and selecting samples with visible structural differences.}}
+\label{fig:qualitative}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.92\linewidth}{\centering Placeholder for Volterra interaction maps and feature response visualizations.}}
+\caption{Visualization of learned second-order interactions. \todo{Show normalized quadratic response maps and compare them with image structures/degradation regions.}}
+\label{fig:interaction}
+\end{figure}
+
+\section{Discussion}
+\paragraph{Why second-order interactions help.}
+The empirical benefit of \ours is expected to be largest when degradations interact with image structure or with each other. The quadratic term can amplify or suppress responses conditioned on feature co-occurrence, which is useful for distinguishing true image texture from degradation artifacts.
+
+\paragraph{Relation to MR-VNet and HorNet.}
+MR-VNet demonstrates that Volterra-inspired modeling is useful for image restoration, while HorNet shows that high-order spatial interactions can be efficient in convolutional networks. \ours does not dispute these insights. Instead, it studies how a low-rank second-order Volterra operator can be embedded into Transformer restoration blocks and how the operator behaves under unified and composite restoration protocols.
+
+\paragraph{Limitations.}
+\ours introduces additional computation relative to a plain Transformer block. The rank $R$ controls this cost, but very high ranks may provide diminishing returns. In addition, all-in-one restoration remains sensitive to dataset balance; therefore, training mixtures and evaluation protocols must be reported carefully.
+
+\section{Conclusion}
+We presented \ours, a Volterra-enhanced Transformer for unified image restoration. By adding low-rank second-order interactions to both global mixing and local refinement paths, \ours explicitly models non-additive feature dependencies that arise in diverse and composite degradations. The revised experimental design separates single-task, all-in-one, and composite protocols, and includes efficiency, sensitivity, ablation, qualitative, and interpretability analyses. \todo{Complete conclusion with final verified results.}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
