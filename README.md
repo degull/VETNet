@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="#overview">English</a> · <a href="#한국어-소개">한국어</a> ·
-  <a href="#results">Results</a> · <a href="#repository-structure">Code</a>
+  <a href="#results">Results</a>
 </p>
 
 ---
