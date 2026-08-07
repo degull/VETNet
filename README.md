@@ -35,34 +35,21 @@ The same shared network handles multiple degradation types without task-specific
 - **Unified restoration:** A single shared architecture handles heterogeneous and coexisting degradations without degradation-specific branches.
 - **Rank-controlled formulation:** Low-rank factorization avoids explicitly constructing a full quadratic kernel. The main model uses rank \(R=4\).
 
-## Method
+Method
 
-For an input feature map \(X \in \mathbb{R}^{C \times H \times W}\), the truncated second-order Volterra operator is defined as
+For an input feature map (X \in \mathbb{R}^{C \times H \times W}), the truncated second-order Volterra operator is defined as
 
-$$
-\mathcal{V}(X)
-=
-L * X
-+
-\Gamma_2 \sum_{r=1}^{R}
-\left(Q_r^{(1)} * X\right)
-\odot
-\left(Q_r^{(2)} * X\right),
-$$
+L * X+\Gamma_2 \sum_{r=1}^{R}\left(Q_r^{(1)} * X\right)\odot\left(Q_r^{(2)} * X\right),$$
 
-where \(*\) is convolution, \(\odot\) is element-wise multiplication, \(R\) is the interaction rank, and \(\Gamma_2\) controls the contribution of the quadratic response.
+where (*) is convolution, (\odot) is element-wise multiplication, (R) is the interaction rank, and (\Gamma_2) controls the contribution of the quadratic response.
 
 Each VET block applies this operator to both major Transformer pathways:
 
-$$
-Z_1 = X + \mathcal{V}\!\left(\mathrm{MDTA}(\mathrm{LN}(X))\right),
-$$
+$$Z_1 = X + \mathcal{V}!\left(\mathrm{MDTA}(\mathrm{LN}(X))\right),$$
 
-$$
-Z_2 = Z_1 + \mathcal{V}\!\left(\mathrm{GDFN}(\mathrm{LN}(Z_1))\right).
-$$
+$$Z_2 = Z_1 + \mathcal{V}!\left(\mathrm{GDFN}(\mathrm{LN}(Z_1))\right).$$
 
-The complete model follows a hierarchical encoder-latent-decoder design with skip addition and a final refinement stage. The default implementation uses base width 48, block depths \([4,6,6,8]\), attention heads \([1,2,4,8]\), four refinement blocks, and Volterra rank 4.
+The complete model follows a hierarchical encoder-latent-decoder design with skip addition and a final refinement stage. The default implementation uses base width 48, block depths ([4,6,6,8]), attention heads ([1,2,4,8]), four refinement blocks, and Volterra rank 4.
 
 ## Results
 
@@ -158,29 +145,6 @@ VTN_IR/
 └── Restormer + Volterra/       # Earlier experimental workspace
 ```
 
-The maintained implementation is located under `VTN/`. Other top-level folders contain earlier experiments and supporting material retained for reproducibility.
-
-## Usage
-
-Clone the repository and enter the maintained project directory:
-
-```bash
-git clone https://github.com/degull/VTN_IR.git
-cd VTN_IR/VTN
-```
-
-Prepare datasets under `VTN/data/` and update `config.py` if your paths differ. Task-specific entry points are available under `tasks/`, while unified training, evaluation, ablation, and benchmarking utilities are under `scripts/`.
-
-> **Current code status:** Some experimental scripts still contain paths or imports inherited from the original Windows workspace. Check the selected script and dataset path configuration before running an experiment. A unified command-line interface and pinned environment file are planned.
-
-## Citation
-
-If you find this project useful, please cite the VTN-IR manuscript. The final BibTeX entry will be added after publication details are confirmed.
-
-## Acknowledgements
-
-VTN-IR builds on ideas from Transformer-based image restoration and the Restormer architecture. We thank the authors of the referenced methods and public datasets for making their work available.
-
 ---
 
 ## 한국어 소개
@@ -212,13 +176,3 @@ VTN-IR은 다음 세 가지 조건에서 평가했습니다.
 3. **복합 열화 복원:** Rain+Haze, Rain+Blur, Haze+Snow처럼 여러 열화가 동시에 존재하는 입력을 평가합니다.
 
 평가 지표로 PSNR과 SSIM을 사용했습니다. 세부 정량 결과는 위의 [Results](#results) 표에서 확인할 수 있습니다.
-
-### 데이터와 실행 준비
-
-데이터셋과 체크포인트는 저장소에 포함되어 있지 않습니다. 각 데이터셋을 공식 배포처에서 내려받은 뒤 `VTN/data/`에 배치하거나 `VTN/config.py`의 경로를 수정해야 합니다.
-
-현재 유지·관리 대상 구현은 `VTN/` 폴더에 있습니다. `Restormer + Volterra/`, `ablation/` 등 나머지 폴더에는 재현성과 실험 기록을 위해 보존한 이전 코드가 포함되어 있습니다. 일부 실험 스크립트에는 기존 Windows 작업 환경의 경로나 import 구조가 남아 있으므로 실행 전에 반드시 확인해야 합니다.
-
-## License
-
-No license has been specified for this repository yet. Please contact the repository owner before reusing or redistributing the code.
