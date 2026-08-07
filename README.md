@@ -17,6 +17,10 @@
 
 ## Overview
 
+
+<img width="1460" height="820" alt="vtn-ir-architecture" src="https://github.com/user-attachments/assets/05ac5ac7-4f59-4872-8ff7-28b81a04bf12" />
+
+
 VTN-IR is a unified image restoration network that augments a hierarchical Transformer encoder-decoder with a **truncated second-order Volterra operator**. The proposed Volterra-Enhanced Transformer (VET) block explicitly models multiplicative cross-feature interactions that are otherwise learned only implicitly through attention, nonlinear activations, or gating.
 
 The same shared network handles multiple degradation types without task-specific branches or conditional modules:
