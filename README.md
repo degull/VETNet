@@ -41,11 +41,20 @@ The same shared network handles multiple degradation types without task-specific
 
 Method
 
-For an input feature map (X \in \mathbb{R}^{C \times H \times W}), the truncated second-order Volterra operator is defined as
+For an input feature map $X \in \mathbb{R}^{C \times H \times W}$, the truncated second-order Volterra operator is defined as
 
-L * X+\Gamma_2 \sum_{r=1}^{R}\left(Q_r^{(1)} * X\right)\odot\left(Q_r^{(2)} * X\right),$$
+```math
+\mathcal{V}(X)
+=
+L * X
++
+\Gamma_2 \sum_{r=1}^{R}
+\left(Q_r^{(1)} * X\right)
+\odot
+\left(Q_r^{(2)} * X\right)
+```
 
-where (*) is convolution, (\odot) is element-wise multiplication, (R) is the interaction rank, and (\Gamma_2) controls the contribution of the quadratic response.
+where $*$ denotes convolution, $\odot$ denotes element-wise multiplication, $R$ is the interaction rank, and $\Gamma_2$ controls the contribution of the quadratic response.
 
 Each VET block applies this operator to both major Transformer pathways:
 
